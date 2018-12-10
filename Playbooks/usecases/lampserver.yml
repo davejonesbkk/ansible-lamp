@@ -1,0 +1,76 @@
+--- #Build a LAMP server
+
+- hosts: lamp-hosts
+  user: root
+  sudo: yes
+  gather_facts: yes
+  vars:
+    apache_pkg: httpd
+    distribution: "{{ ansible_os_family }}"
+    apache_version: 2.4
+    apache_dir: /var/www/html
+    mysql_root_password: password123
+    epel_repo_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
+    epel_repo_gpg_key_url: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}"
+    epel_repofile_path: "/etc/yum.repos.d/epel.repo"
+  tasks:
+   -  name: Install All Required Packages
+      yum: name={{ item }} state=latest
+      with_items:
+        - httpd
+        - mariadb-server
+        - mariadb
+        - php
+        - php-mysql
+        - mysql-devel
+        - MySQL-python
+        - python-setuptools
+   - name: Install EPEL repo
+     yum: name={{ epel_repo_url }} state=present
+   - name: Import EPEL GPG key
+     rpm_key: key={{ epel_repo_gpg_key_url }} state=present
+   - name: Install python pip
+     yum: name=python-pip state=present 
+   - name: Upgrade pip
+     pip: name=pip state=latest
+   - name: Create the Apache dir
+     file: path={{ apache_dir }} state=directory mode=644
+   - name: Enable firewalld
+     service: name=firewalld state=started enabled=yes
+   - name: Allow HTTP/HTTPS
+     command: firewall-cmd --add-service=http --add-service=https --permanent
+   - name: Reload the firewalld
+     command: firewall-cmd --reload
+   - name: Make Apache owner of httpd root dir
+     command: chown apache:apache -R /var/www/html
+   - name: Start & enable httpd
+     service: name=httpd state=started enabled=yes
+   - name: Start & enable MariaDB
+     service: name=mariadb state=started enabled=yes
+   - name: Sets the MYSQL root password
+     mysql_user: login_password={{ mysql_root_password }} check_implicit_admin=yes name=root host={{ item }} password={{ mysql_root_password }} state=present     
+     with_items:
+       - localhost
+       - 127.0.0.1
+       - ::1 
+   - name: Deletes anonymous MySQL server user for localhost
+     mysql_user: login_user=root login_password={{ mysql_root_password }} user="" host_all=yes state=absent
+   - name: Secures the MySQL root user for IPV6 localhost (::1)
+     mysql_user: login_user=root login_password={{ mysql_root_password }} user=root password={{ mysql_root_password }} host="::1" 
+   - name: Secures the MySQL root user for IPV4 localhost (127.0.0.1)
+     mysql_user: login_user=root login_password={{ mysql_root_password }} user=root password={{ mysql_root_password }} host="127.0.0.1"
+   - name: Secures the MySQL root user for localhost domain (localhost)
+     mysql_user: login_user=root login_password={{ mysql_root_password }} user=root password={{ mysql_root_password }} host="localhost"
+   - name: Removes the MySQL test database
+     mysql_db: login_user=root login_password={{ mysql_root_password }} db=test state=absent 
+   - name: Copy phpinfo page to remote hosts
+     copy:
+       src: /etc/ansible/statics/phpinfo.php
+       dest: /var/www/html/
+       owner: apache
+       group: apache
+       mode: 0644 
+
+ 
+
+
