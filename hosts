@@ -1,0 +1,4 @@
+
+[lamp-hosts]
+vm5 ansible_host=192.168.122.242
+vm6 ansible_host=192.168.122.67
